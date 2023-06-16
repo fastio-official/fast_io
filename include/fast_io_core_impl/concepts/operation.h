@@ -32,7 +32,17 @@ concept dynamic_reserve_printable=std::integral<char_type>&&requires(T t,char_ty
 	{print_reserve_size(io_reserve_type<char_type,std::remove_cvref_t<T>>,t)}->std::convertible_to<std::size_t>;
 	{print_reserve_define(io_reserve_type<char_type,std::remove_cvref_t<T>>,ptr,t)}->std::convertible_to<char_type*>;
 };
-
+#if 0
+template<typename char_type,typename T>
+concept context_reserve_printable=std::integral<char_type>&&requires(T t,char_type* ptr)
+{
+	{print_context_reserve_size(io_reserve_type<char_type,std::remove_cvref_t<T>>)}->std::convertible_to<std::size_t>;
+	requires requires(typename std::remove_cvref_t<decltype(print_context_type(io_reserve_type<char_type,T>))>::type st)
+	{
+	{print_context_define(io_reserve_type<char_type,std::remove_cvref_t<T>>,ptr,st)};
+	}
+};
+#endif
 template<typename char_type,typename T>
 concept printable_internal_shift=requires(T t)
 {
@@ -44,6 +54,13 @@ concept precise_reserve_printable=std::integral<char_type>&&(reserve_printable<c
 {
 	{print_reserve_precise_size(io_reserve_type<char_type,std::remove_cvref_t<T>>,t)}->std::convertible_to<std::size_t>;
 	print_reserve_precise_define(io_reserve_type<char_type,std::remove_cvref_t<T>>,ptr,n,t);
+};
+
+template<typename char_type,typename T>
+concept reserve_scatters_printable=std::integral<char_type>&&requires(T t,::fast_io::basic_io_scatter_t<char_type>* scatters,char_type* ptr)
+{
+	{print_reserve_scatters_size(io_reserve_type<char_type,std::remove_cvref_t<T>>)}->::std::same_as<reserve_scatters_size_result>;
+	{print_reserve_scatters_define(io_reserve_type<char_type,std::remove_cvref_t<T>>,scatters,ptr,t)}->::std::same_as<::fast_io::basic_reserve_scatters_define_result<char_type>>;
 };
 
 template<typename char_type,typename T>
@@ -80,12 +97,6 @@ template<typename char_type,typename T>
 concept status_io_print_forwardable=std::integral<char_type>&&requires(T&& t)
 {
 	status_io_print_forward(io_alias_type<char_type>,::fast_io::freestanding::forward<T>(t));
-};
-
-template<typename io_device,typename... Args>
-concept io_controllable=requires(io_device device,Args&& ...args)
-{
-	io_control(device,::fast_io::freestanding::forward<Args>(args)...);
 };
 
 struct manip_tag_t{};

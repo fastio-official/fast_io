@@ -496,14 +496,14 @@ inline void c_flush_unlocked_impl(FILE* fp)
 }
 
 template<c_family family>
-inline std::uintmax_t my_c_io_seek_impl(FILE*,std::intmax_t,seekdir)
+inline ::fast_io::intfpos_t my_c_io_seek_impl(FILE*,::fast_io::intfpos_t,seekdir)
 {
 	avr_libc_nosup_impl();
 }
 
 #else
 template<c_family family>
-inline std::uintmax_t my_c_io_seek_impl(FILE* fp,std::intmax_t offset,seekdir s)
+inline ::fast_io::intfpos_t my_c_io_seek_impl(FILE* fp,::fast_io::intfpos_t offset,seekdir s)
 {
 
 /*
@@ -532,7 +532,7 @@ https://www.gnu.org/software/libc/manual/html_node/File-Positioning.html
 		auto val{noexcept_call(ftello64,fp)};
 		if(val<0)
 			throw_posix_error();
-		return static_cast<std::uintmax_t>(val);
+		return static_cast<::fast_io::intfpos_t>(val);
 #endif
 #else
 		return my_c_io_seek_impl<c_family::standard>(fp,offset,s);
@@ -551,9 +551,9 @@ https://www.gnu.org/software/libc/manual/html_node/File-Positioning.html
 			throw_posix_error(ent._errno);
 		return val;
 #elif defined(__MSDOS__) || defined(__CYGWIN__) || defined(_PICOLIBC__) || (defined(__MINGW32__)&&!__has_include(<_mingw_stat64.h>))
-		if constexpr(sizeof(long)<sizeof(std::intmax_t))
+		if constexpr(sizeof(long)<sizeof(::fast_io::intfpos_t))
 		{
-			if(offset<static_cast<std::intmax_t>(std::numeric_limits<long>::min())||offset>static_cast<std::intmax_t>(std::numeric_limits<long>::max()))
+			if(offset<static_cast<::fast_io::intfpos_t>(std::numeric_limits<long>::min())||offset>static_cast<::fast_io::intfpos_t>(std::numeric_limits<long>::max()))
 				throw_posix_error(EINVAL);
 		}
 		if(noexcept_call(::fseek,fp,static_cast<long>(offset),static_cast<int>(s)))
@@ -561,7 +561,7 @@ https://www.gnu.org/software/libc/manual/html_node/File-Positioning.html
 		auto val{noexcept_call(::ftell,fp)};
 		if(val<0)
 			throw_posix_error();
-		return static_cast<std::uintmax_t>(static_cast<long unsigned>(val));
+		return static_cast<::fast_io::intfpos_t>(static_cast<long unsigned>(val));
 #else
 		if(
 #if (defined(_WIN32)&&!defined(__WINE__)&&!defined(__BIONIC__)) && !defined(__CYGWIN__)
@@ -596,7 +596,7 @@ https://www.gnu.org/software/libc/manual/html_node/File-Positioning.html
 		};
 		if(val<0)
 			throw_posix_error();
-		return static_cast<std::uintmax_t>(val);
+		return static_cast<::fast_io::intfpos_t>(val);
 #endif
 	}
 }
@@ -622,6 +622,8 @@ class basic_c_family_io_observer
 {
 public:
 	using char_type = ch_type;
+	using input_char_type = char_type;
+	using output_char_type = char_type;
 	using native_handle_type = FILE*;
 	native_handle_type fp{};
 	constexpr native_handle_type native_handle() const noexcept
@@ -719,19 +721,35 @@ public:
 };
 
 template<c_family family,std::integral ch_type>
-inline constexpr basic_c_family_io_observer<family,ch_type> io_value_handle(basic_c_family_io_observer<family,ch_type> other) noexcept
+inline constexpr basic_c_family_io_observer<family,ch_type> io_stream_ref_define(basic_c_family_io_observer<family,ch_type> other) noexcept
 {
 	return other;
 }
+
+template<c_family family,std::integral ch_type>
+inline constexpr basic_c_family_io_observer<family,char> io_bytes_stream_ref_define(basic_c_family_io_observer<family,ch_type> other) noexcept
+{
+	return {other.fp};
+}
+
+template<c_family family,std::integral ch_type>
+requires (family==c_family::standard||family==c_family::emulated)
+inline constexpr basic_c_family_io_observer<family,ch_type> io_stream_mutex_ref_define(basic_c_family_io_observer<family,ch_type> other) noexcept
+{
+	return other;
+}
+
+template<c_family family,std::integral ch_type>
+requires (family==c_family::standard||family==c_family::emulated)
+inline constexpr basic_c_family_io_observer<c_family::native_unlocked,ch_type> io_stream_unlocked_ref_define(basic_c_family_io_observer<family,ch_type> other) noexcept
+{
+	return {other.fp};
+}
+
+
 #if defined(__AVR__)
 template<c_family family,std::integral ch_type>
 inline constexpr posix_file_status status(basic_c_family_io_observer<family,ch_type> ciob)
-{
-	details::avr_libc_nosup_impl();
-}
-
-template<c_family family,std::integral ch_type,typename... Args>
-inline void io_control(basic_c_family_io_observer<family,ch_type> h,Args&& ...args)
 {
 	details::avr_libc_nosup_impl();
 }
@@ -753,23 +771,16 @@ inline constexpr posix_file_status status(basic_c_family_io_observer<family,ch_t
 {
 	return status(static_cast<basic_posix_io_observer<ch_type>>(ciob));
 }
-
-template<c_family family,std::integral ch_type,typename... Args>
-requires io_controllable<basic_posix_io_observer<ch_type>,Args...>
-inline decltype(auto) io_control(basic_c_family_io_observer<family,ch_type> h,Args&& ...args)
-{
-	return io_control(static_cast<basic_posix_io_observer<ch_type>>(h),::std::forward<Args>(args)...);
-}
 #endif
 
 template<c_family family,std::integral ch_type>
-inline void flush(basic_c_family_io_observer<family,ch_type> cfhd)
+inline void io_stream_buffer_flush_define(basic_c_family_io_observer<family,ch_type> cfhd)
 {
 	details::my_c_io_flush_impl<family>(cfhd.fp);
 }
 
 template<c_family family,std::integral ch_type>
-inline std::uintmax_t seek(basic_c_family_io_observer<family,ch_type> cfhd,std::intmax_t offset=0,seekdir s=seekdir::cur)
+inline ::fast_io::intfpos_t io_stream_seek_bytes_define(basic_c_family_io_observer<family,ch_type> cfhd,::fast_io::intfpos_t offset,seekdir s)
 {
 	return details::my_c_io_seek_impl<family>(cfhd.fp,offset,s);
 }
@@ -789,75 +800,6 @@ inline constexpr auto operator<=>(basic_c_family_io_observer<family,ch_type> a,b
 }
 #endif
 
-
-namespace details
-{
-#if defined(__AVR__)
-template<c_family family>
-inline constexpr bool my_c_is_character_device_impl(FILE*) noexcept
-{
-	return false;
-}
-template<c_family family>
-inline void my_c_clear_screen_impl(FILE*)
-{
-	avr_libc_nosup_impl();
-}
-
-#else
-template<c_family family>
-inline bool my_c_is_character_device_impl(FILE* fp) noexcept
-{
-	return posix_is_character_device(my_fileno_impl<family>(fp));
-}
-
-template<c_family family>
-inline void my_c_clear_screen_impl(FILE* fp)
-{
-	if constexpr(family==c_family::native)
-	{
-		if constexpr(c_family::native==c_family::native_unlocked)
-		{
-			my_c_clear_screen_impl<c_family::native_unlocked>(fp);
-		}
-		else
-		{
-			basic_c_family_io_observer<c_family::native,char> ciob{fp};
-			io_lock_guard guard{ciob};
-			my_c_clear_screen_impl<c_family::native_unlocked>(fp);
-		}
-	}
-	else
-	{
-#if (defined(_WIN32)&&!defined(__WINE__)&&!defined(__BIONIC__)) && !defined(__CYGWIN__)
-		void* handle{my_fp_to_win32_handle_impl<c_family::native_unlocked>(fp)};
-		if(!::fast_io::win32::details::win32_is_character_device(handle))
-			return;
-		my_c_io_flush_impl<c_family::native_unlocked>(fp);
-		::fast_io::win32::details::win32_clear_screen_main(handle);
-#else
-		int fd{my_fileno_impl<c_family::native_unlocked>(fp)};
-		if(!posix_is_character_device(fd))
-			return;
-		my_c_io_flush_impl<c_family::native_unlocked>(fp);
-		posix_clear_screen_main(fd);
-#endif
-	}
-}
-#endif
-}
-
-template<c_family family,std::integral ch_type>
-inline bool is_character_device(basic_c_family_io_observer<family,ch_type> ciob) noexcept
-{
-	return details::my_c_is_character_device_impl<family>(ciob.fp);
-}
-
-template<c_family family,std::integral ch_type>
-inline void clear_screen(basic_c_family_io_observer<family,ch_type> ciob)
-{
-	details::my_c_clear_screen_impl<family>(ciob.fp);
-}
 #if !defined(__AVR__)
 template<c_family family,std::integral ch_type>
 requires requires(basic_c_family_io_observer<family,ch_type> h)
@@ -915,6 +857,8 @@ class basic_c_family_file:public basic_c_family_io_observer<family,ch_type>
 {
 public:
 	using char_type = ch_type;
+	using input_char_type = char_type;
+	using output_char_type = char_type;
 	using native_handle_type = FILE*;
 	constexpr basic_c_family_file() noexcept=default;
 	template<typename native_hd>
@@ -1108,3 +1052,4 @@ struct is_zero_default_constructible<basic_c_family_file<fm,char_type>>
 #include"macros_general.h"
 #endif
 
+#include"preadwrite.h"
