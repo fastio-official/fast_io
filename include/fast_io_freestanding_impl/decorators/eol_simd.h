@@ -13,7 +13,6 @@ inline constexpr deco_result<char_type,char_type>
 {
 	constexpr std::size_t initialdiffn{::fast_io::details::optimal_simd_vector_run_with_cpu_instruction_size};
 	constexpr unsigned N{initialdiffn/sizeof(char_type)};
-	constexpr unsigned Np1{N+1u};
 	using simd_vector_type = ::fast_io::intrinsics::simd_vector<char_type,N>;
 	constexpr char_type lfchct{char_literal_v<u8'\n',std::remove_cvref_t<char_type>>};
 	constexpr char_type lfchr{char_literal_v<u8'\r',std::remove_cvref_t<char_type>>};
@@ -27,30 +26,73 @@ inline constexpr deco_result<char_type,char_type>
 	simd_vector_type charsvec;
 	charsvec.load(characters_array_impl<tofdch,char_type,N>.data());
 #endif
-	for(simd_vector_type vec;;)
+	simd_vector_type vec;
+	for(;fromfirst!=fromlast&&tofirst!=tolast;++fromfirst)
 	{
-		::std::size_t fromdiff{static_cast<::std::size_t>(fromlast-fromfirst)};
-		::std::size_t todiff{static_cast<::std::size_t>(tolast-tofirst)};
-		if(fromdiff<N||todiff<Np1)
+		if(*fromfirst!=tofdch)
 		{
-			break;
+			*tofirst=*fromfirst;
+			++fromfirst;
+			++tofirst;
+			::std::size_t fromdiff{static_cast<::std::size_t>(fromlast-fromfirst)};
+			::std::size_t todiff{static_cast<::std::size_t>(tolast-tofirst)};
+			if(todiff<fromdiff)
+			{
+				fromdiff=todiff;
+			}
+			fromdiff/=N;
+			for(;fromdiff;--fromdiff)
+			{
+				vec.load(fromfirst);
+				auto comres{vec!=charsvec};
+				if(!::fast_io::intrinsics::is_all_zeros(comres))
+				{
+					break;
+				}
+				vec.store(tofirst);
+				fromfirst+=N;
+				tofirst+=N;
+			}
+			if(!fromdiff)
+			{
+				break;
+			}
+			::std::size_t fromdiff2{static_cast<::std::size_t>(fromlast-fromfirst)};
+			::std::size_t todiff2{static_cast<::std::size_t>(tolast-tofirst)};
+			if(todiff2<fromdiff2)
+			{
+				fromdiff2=todiff2;
+			}
+			for(;fromdiff2;--fromdiff2)
+			{
+				auto ch{*fromfirst};
+				if(ch==tofdch)
+				{
+					break;
+				}
+				*tofirst=ch;
+				++fromfirst;
+				++tofirst;
+			}
+			if(!fromdiff2)
+			{
+				break;
+			}
 		}
-		vec.load(fromfirst);
-		auto comres{vec!=charsvec};
-		vec.store(tofirst);
-		if(::fast_io::intrinsics::is_all_zeros(comres))
+		if constexpr(cr)
 		{
-			fromfirst+=N;
-			tofirst+=N;
-			continue;
+			*tofirst=lfchct;
+			++tofirst;
+			*tofirst=lfchr;
+			++tofirst;
 		}
-		unsigned pos{::fast_io::intrinsics::vector_mask_countr_one(comres)};
-		fromfirst+=pos+1;
-		tofirst+=pos;
-		*tofirst=lfchr;
-		++tofirst;
-		*tofirst=lfchct;
-		++tofirst;
+		else
+		{
+			*tofirst=lfchr;
+			++tofirst;
+			*tofirst=lfchct;
+			++tofirst;
+		}
 	}
 	return {fromfirst,tofirst};
 }

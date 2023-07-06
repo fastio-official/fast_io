@@ -104,7 +104,7 @@ template<typename in_char_type,typename out_char_type>
 FAST_IO_MODULE_EXPORT struct deco_result
 {
 	in_char_type const * input_result_ptr{};
-	in_char_type * output_result_ptr{};
+	out_char_type * output_result_ptr{};
 };
 
 FAST_IO_MODULE_EXPORT enum class seekdir
@@ -116,5 +116,12 @@ end = 2,				//SEEK_END
 
 using uintfpos_t = ::std::uintmax_t;
 using intfpos_t = ::std::intmax_t;
+
+struct io_construct_t
+{
+explicit constexpr io_construct_t() noexcept = default;
+};
+
+inline constexpr io_construct_t io_construct{};
 
 }
